@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mordle</title>
+    <h1>MORDLE <span id="wordle-no" style="font-size: 1rem; color: #818384; font-weight: normal; letter-spacing: normal;"></span></h1>
     <style>
 
         #keyboard {
@@ -116,7 +116,6 @@
     </style>
 </head>
 <body>
-    <h1>MORDLE</h1>
     <div id="msg"></div>
     <div id="board"></div>
     <div id="keyboard"></div>
@@ -139,7 +138,12 @@
 
     fetch('/api/word')
         .then(response => response.json())
-        .then(data => {solution = data.word.toLowerCase();})
+        .then(data => {
+            solution = data.word.toLowerCase();
+            if (data.no) {
+                document.getElementById("wordle-no").innerText = `No. ${data.no}`;
+            }
+        })
         .catch(error => console.error("Failed to fetch word", error));
 
     const board = document.getElementById("board");

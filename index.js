@@ -5,7 +5,6 @@ const {v4: uuidv4} = require("uuid");
 const path = require("path");
 const fs = require("fs");
 
-
 const url = process.env.MATRIX_URL;
 const token = process.env.MATRIX_TOKEN;
 const dbFile = 'data/database.json';
@@ -17,14 +16,36 @@ const port = 3000;
 app.use(express.json());
 
 
-//this needs to be all replaced someday, with the actual wordle answer, bu t whatever smh my head
-app.get('/api/word', (req, res) => {                            //so true
-    const answers = ["train", "adieu", "lease", "grand", "furry", "knots", "based", "apple", "queue", "drink"];
-    const t = Math.floor(Date.now()/(1000 * 60 * 60 * 24));
-    res.json({ word: answers[t % answers.length]});
+async function getAnswer() {
+  try{
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const formattedDate = `${year}-${month}-${day}`;
+
+    const url = `https://www.nytimes.com/svc/wordle/v2/${formattedDate}.json`;
+    const response = await fetch(url);
+
+    if (!response.ok)
+      throw new Error(response.statusText);
+
+    const data = await response.json();
+    return data;
+   }catch (error){
+    console.error(error.message);
+    return null;
+  }
+}
+
+app.get('/api/word', async (req, res) => {
+    const answer = await getAnswer();
+    if(answer){
+        res.json({word: answer.solution.toLowerCase(), no: answer.days_since_launch});
+    }else{
+        res.json({word: "furry", no: "???"});
+    }
 });
-
-
 
 app.post('/api/result', (req, res) => {
     const {gid, box, attempts, ifwon} = req.body;
@@ -190,20 +211,23 @@ client.on("room.message", (roomid, event) => {
             return a.score - b.score;
         });
 
-        let message = "Today's Wordle Leaderboard\n\n";
-        
-        scoreboard.forEach((player, index) => {
-            let medal = "⬛";
-            if (player.score !== 'X'){
-                if (index === 0) medal = "🥇";
-                else if (index === 1) medal = "🥈";
-                else if (index === 2) medal = "🥉";
-            }
+        getAnswer().then(wordleData => {
+            const wordleNo = wordleData ? wordleData.days_since_launch : "???";
+            let message = `Todays wordle scores\nNo. ${wordleNo}\n\n`;
             
-            message += `${medal} ${player.usid}: ${player.score}/6\n`;
-        });
+            scoreboard.forEach((player, index) => {
+                let medal = "⬛";
+                if (player.score !== 'X'){
+                    if (index === 0) medal = "🥇";
+                    else if (index === 1) medal = "🥈";
+                    else if (index === 2) medal = "🥉";
+                }
+                
+                message += `${medal} ${player.usid}: ${player.score}/6\n`;
+            });
 
-        client.sendMessage(roomid, {msgtype: "m.text",body: message});
+            client.sendMessage(roomid, {msgtype: "m.text",body: message});
+        });
     }
 });
 
