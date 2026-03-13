@@ -6,7 +6,7 @@ const path = require("path");
 const fs = require("fs");
 
 
-const url = "https://matrix.simplybush.pl";
+const url = process.env.MATRIX_URL;
 const token = process.env.MATRIX_TOKEN;
 const dbFile = 'data/database.json';
 

@@ -5,13 +5,13 @@ services:
     restart: unless-stopped
     networks:
       - traefik
-    labels:
+    labels: #Literary no fucking idea how this works, copied straight from the playbook generated rules, substituting
       - "traefik.enable=true"
-      - "traefik.http.routers.wordle.rule=Host(`wordle.simplybush.pl`)"
+      - "traefik.http.routers.wordle.rule=Host(`wordle.simplybush.pl`)" # here by adding the wordle prefix
       - "traefik.http.routers.wordle.entrypoints=web-secure"
       - "traefik.http.routers.wordle.tls=true"
       - "traefik.http.routers.wordle.tls.certresolver=default"
-      - "traefik.http.services.wordle.loadbalancer.server.port=3000"
+      - "traefik.http.services.wordle.loadbalancer.server.port=3000" # and here by changing the port
     volumes:
       - ./data:/app/data
 
