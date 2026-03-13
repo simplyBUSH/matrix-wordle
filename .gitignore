@@ -1,0 +1,7 @@
+.env
+node_modules/
+data/
+.DS_Store
+.index1.js
+.index2.html
+bot-state.json

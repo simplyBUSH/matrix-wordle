@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mordle</title>
+    <style>
+
+        #keyboard {
+            margin-top: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .keyboard-row {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            width: 100%;
+        }
+
+        .key{
+            background-color: #818384; 
+            color: #ffffff;
+            font-weight: bold;
+            border-radius: 4px;
+            height: 58px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            text-transform: uppercase;
+            flex: 1;
+            max-width: 43px;
+            user-select: none;
+	    transition: background-color 0.2s; 
+	}
+
+        
+        .key.large{
+            flex: 1.5;
+            max-width: 65px;
+            font-size: 0.85rem;
+        }
+
+        body{
+            background-color: #121213;
+            color: #ffffff;
+            font-family: 'Clear Sans', 'Helvetica Neue', Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding-top: 20px;
+        }
+
+        h1{
+            margin: 0 0 20px 0;
+            border-bottom: 1px solid #3a3a3c;
+            padding-bottom: 10px;
+            width: 100%;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+
+        #board{
+            display: grid;
+            grid-template-rows: repeat(6, 1fr);
+            grid-gap: 5px;
+            padding: 10px;
+            box-sizing: border-box;
+            width: 350px;
+            height: 420px;
+        }
+
+        .row{
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            grid-gap: 5px;
+        }
+
+        .tile{
+            border: 2px solid #3a3a3c;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        #msg{
+            position: absolute;
+            top: 80px;
+            background-color: #e3e3e1;
+            color: #121213;
+            padding: 12px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 100;
+        }
+
+        #msg.show{
+            opacity: 1;
+        }
+
+
+    </style>
+</head>
+<body>
+    <h1>MORDLE</h1>
+    <div id="msg"></div>
+    <div id="board"></div>
+    <div id="keyboard"></div>
+
+<script>
+    function notif(message){
+        const msg = document.getElementById("msg");
+        msg.innerText = message;
+        msg.classList.add("show");
+        setTimeout(() => {msg.classList.remove("show");}, 2000);
+    }
+
+    let wordlist = [];
+    let solution = "apple"; 
+    let iconbox = "";
+
+    fetch('https://raw.githubusercontent.com/tabatkins/wordle-list/master/words')
+        .then(res => res.text())
+        .then(text => {wordlist = text.split('\n');});
+
+    fetch('/api/word')
+        .then(response => response.json())
+        .then(data => {solution = data.word.toLowerCase();})
+        .catch(error => console.error("Failed to fetch word", error));
+
+    const board = document.getElementById("board");
+    for (let i = 0; i<6; i++){
+        let row = document.createElement("div");
+        row.className = "row";
+        for (let j=0; j<5; j++) {
+            let tile = document.createElement("div");
+            tile.className = "tile";
+            tile.id = i.toString() + "-" + j.toString(); 
+            row.appendChild(tile);
+        }
+        board.appendChild(row);
+    }
+
+    const keyboardLayout = [
+        ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+        ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+        ["ENTER", "Z", "X", "C", "V", "B", "N", "M", "⌫"]
+    ];
+    
+    const keyboard = document.getElementById("keyboard");
+    
+    keyboardLayout.forEach(row => {
+        let rowDiv = document.createElement("div");
+        rowDiv.className = "keyboard-row";
+        
+        row.forEach(keyText =>{
+            let keyBtn = document.createElement("div");
+            keyBtn.className = "key";
+            keyBtn.innerText = keyText;
+            keyBtn.id = "key-" + keyText; 
+            
+            if (keyText === "ENTER" || keyText === "⌫"){
+                keyBtn.classList.add("large");
+            }
+
+            
+            keyBtn.addEventListener("click", () => {
+                let input = keyText === "⌫" ? "Backspace" : keyText;
+                processInput(input);
+            });
+            
+            rowDiv.appendChild(keyBtn);
+        });
+        keyboard.appendChild(rowDiv);
+    });
+
+    let cx = 0;
+    let cy = 0;
+    let isOver = false;
+
+function sendResults(didWin){
+        const gameId = window.location.pathname.substring(1);
+        const attempts = cx + 1; 
+
+        fetch('/api/result', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                gid: gameId, 
+                box: iconbox.trim(), 
+                attempts: attempts, 
+                ifwon: didWin
+            })
+        }).then(() => console.log("Results sent to chat!"));
+    }
+
+    
+    function colorKey(letter, colorHex){
+        let keyBtn = document.getElementById("key-" + letter.toUpperCase());
+        if (!keyBtn) return;
+        
+        
+        if (keyBtn.style.backgroundColor === "rgb(83, 141, 78)") return; 
+        
+        keyBtn.style.backgroundColor = colorHex;
+        keyBtn.style.borderColor = colorHex;
+    }
+
+    
+    function processInput(key){
+        if (isOver || cx > 5) return;
+
+        if (/^[a-zA-Z]$/.test(key)){
+            if (cy < 5){
+                let currTile = document.getElementById(cx + "-" + cy);
+                currTile.innerText = key.toUpperCase();
+                cy += 1;
+            }
+        } 
+        else if (key === "Backspace"){
+            if (cy > 0){
+                cy -= 1;
+                let currTile = document.getElementById(cx + "-" + cy);
+                currTile.innerText = "";
+            }
+        } 
+        else if (key === "Enter" || key === "ENTER"){
+            if (cy === 5){
+                let guess = "";
+                for (let c = 0; c < 5; c++){
+                    guess += document.getElementById(cx + "-" + c).innerText.toLowerCase(); 
+                }
+
+                if (!wordlist.includes(guess)){
+                    notif("Not in word list");
+                    return; 
+                }
+
+                let answerArr = solution.split(""); 
+                let guessArr = guess.split("");
+                let iconrow = ["⬛", "⬛", "⬛", "⬛", "⬛"];
+
+                //pass 1 checkking for corect letters
+                for (let i = 0; i < 5; i++){
+                    let currTile = document.getElementById(cx + "-" + i);
+                    if (guessArr[i] === answerArr[i]) {
+                        currTile.style.backgroundColor = "#538d4e"; 
+                        currTile.style.borderColor = "#538d4e";
+                        colorKey(guessArr[i], "#538d4e"); 
+                        iconrow[i] = "🟩"; 
+                        answerArr[i] = null; 
+                        guessArr[i] = null;
+                    }
+                }
+
+                //pass 2 chekcing for yellow
+                for (let i = 0; i < 5; i++){
+                    let currTile = document.getElementById(cx + "-" + i);
+                    if (guessArr[i] === null) continue; 
+
+                    let letterPos = answerArr.indexOf(guessArr[i]);
+                    if (letterPos !== -1){
+                        currTile.style.backgroundColor = "#b59f3b"; 
+                        currTile.style.borderColor = "#b59f3b";
+                        colorKey(guessArr[i], "#b59f3b"); 
+                        iconrow[i] = "🟨"; 
+                        answerArr[letterPos] = null; 
+                    }else{
+                        currTile.style.backgroundColor = "#3a3a3c"; 
+                        currTile.style.borderColor = "#3a3a3c";
+                        //colorKey(guessArr[i], "#3a3a3c"); // ts was making correct letters gray so idk
+                    }
+                }
+
+                iconbox += iconrow.join("") + "\n";
+
+                if (guess === solution){
+                    notif("Good boy~");
+                    isOver = true;
+                    sendResults(true); 
+                    return;
+                }
+
+                if (cx === 5){
+                    notif(solution.toUpperCase());
+                    isOver = true;
+                    sendResults(false); 
+                    return;
+                }
+
+                cx += 1;
+                cy = 0;
+            }else
+                notif("Not enough letters");
+        }
+    }
+
+    
+    document.addEventListener("keyup", (e) => {processInput(e.key);});
+</script>
+
+
+</body>
+</html>

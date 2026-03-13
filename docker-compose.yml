@@ -1,0 +1,20 @@
+services:
+  wordle-bot:
+    build: .
+    container_name: wordle-bot
+    restart: unless-stopped
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wordle.rule=Host(`wordle.simplybush.pl`)"
+      - "traefik.http.routers.wordle.entrypoints=web-secure"
+      - "traefik.http.routers.wordle.tls=true"
+      - "traefik.http.routers.wordle.tls.certresolver=default"
+      - "traefik.http.services.wordle.loadbalancer.server.port=3000"
+    volumes:
+      - ./data:/app/data
+
+networks:
+  traefik:
+    external: true
