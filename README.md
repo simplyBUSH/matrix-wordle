@@ -25,4 +25,12 @@ Just make sure to edit your .env and Traefik routes
 
 - Colored keys on the frontend
 
+- persistent storage for games client side (no refresh cheating)
 
+- active game caching for possible mid game server restart
+
+- caching wordle answer to avoid API timeout
+
+- fixing bad code (calling getAnswer twice, shadowed variables)
+
+- Enabling end-to-end-encryption (probably for last since not easy)
