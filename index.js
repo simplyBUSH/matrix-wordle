@@ -7,6 +7,7 @@ const fs = require("fs");
 
 const url = process.env.MATRIX_URL;
 const token = process.env.MATRIX_TOKEN;
+const bot_id = process.env.MATRIX_BOT_ID;
 const dbFile = 'data/database.json';
 
 const active = new Map(); 
@@ -128,7 +129,7 @@ const client = new MatrixClient(url, token, storage);
 AutojoinRoomsMixin.setupOnClient(client);
 
 client.on("room.message", (roomid, event) => {
-    if (event.sender === "@wordle:simplybush.pl") return;
+    if (event.sender === bot_id) return;
     if (!event.content || event.content.msgtype !== "m.text") return;
 
     const command = event.content.body.trim();

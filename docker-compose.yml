@@ -1,3 +1,10 @@
+# This compose file is configured for Traefik reverse proxy.
+# If you're not using Traefik, remove the 'labels' section and 'traefik' network,
+# and expose the port directly instead:
+#
+# ports:
+#   - "3000:3000"
+
 services:
   wordle-bot:
     build: .
