@@ -279,7 +279,7 @@ client.start().then(async () => {
             for (const room of rooms){
                 await client.sendMessage(room, {
                     msgtype: "m.text",
-                    vody: msg
+                    body: msg
                 });
 
                 await new Promise(resolve => setTimeout(resolve, 2000));
