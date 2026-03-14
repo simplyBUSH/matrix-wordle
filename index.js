@@ -15,6 +15,33 @@ const app = express();
 const port = 3000;
 app.use(express.json());
 
+function ifplayed(roomid, t) {
+    if (!t) return false;
+    return Object.values(t).some(record => 
+        (record.roomids && record.roomids.includes(roomid)) || record.roomid === roomid
+    );
+}
+
+function getstreak(roomid, db) {
+    let streak = 0;
+    let dateObj = new Date();
+    const d = (date) => date.toLocaleDateString('en-CA', {timeZone: 'Europe/Warsaw'});
+    
+    let playedToday = ifplayed(roomid, db[d(dateObj)]);
+    if (playedToday) streak++;
+    
+    while (true) {
+        dateObj.setDate(dateObj.getDate() - 1);
+        let prevDayStr = d(dateObj);
+        
+        if (ifplayed(roomid, db[prevDayStr])) {
+            streak++;
+        } else {
+            break; 
+        }
+    }
+    return streak;
+}
 
 async function getAnswer() {
   try{
@@ -167,6 +194,13 @@ client.on("room.message", (roomid, event) => {
 
         const gid = uuidv4().substring(0, 8);
         active.set(gid, {roomid: roomid, usid: usid});
+
+        //kills game after 24h
+        setTimeout(() => {
+            if (active.has(gid)) {
+                active.delete(gid);
+            }
+        }, 86400000);
         
         const gameLink = `https://wordle.simplybush.pl/${gid}`;
         client.sendMessage(roomid, {msgtype: "m.text", body: `good luck uwu: ${gameLink}`});
@@ -213,8 +247,9 @@ client.on("room.message", (roomid, event) => {
 
         getAnswer().then(wordleData => {
             const wordleNo = wordleData ? wordleData.days_since_launch : "???";
-            let message = `Todays wordle scores\nNo. ${wordleNo}\n\n`;
+            const str = getstreak(roomid, db);
             
+            let message = `Todays wordle scores\nNo. ${wordleNo} | 🔥 Streak: ${str}\n\n`;            
             scoreboard.forEach((player, index) => {
                 let medal = "⬛";
                 if (player.score !== 'X'){
@@ -231,6 +266,26 @@ client.on("room.message", (roomid, event) => {
     }
 });
 
-client.start().then(() => {
+client.start().then(async () => {
     console.log("Wordle Bot started");
+    const updf = 'update.md'
+
+    if (fs.existsSync(updf)){
+        const msg = fs.readFileSync(updf, 'utf-8');
+
+        try{
+            const rooms = await client.getJoinedRooms();
+
+            for (const room of rooms){
+                await client.sendMessage(room, {
+                    msgtype: "m.text",
+                    vody: msg
+                });
+
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    }
 }).catch((error) => console.error("failed:", error.body || error.message));
