@@ -23,8 +23,6 @@ Just make sure to edit your .env and Traefik routes
 
 - Switching to SQLite
 
-- Fixing some memory leaks
-
 - Colored keys on the frontend
 
 
