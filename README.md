@@ -21,23 +21,13 @@ To deploy this project run
 ```bash
   docker compose up --build
 ```
-Just make sure to edit your .env and Traefik routes
+Just make sure to edit your .env and Traefik routes (examples in repo)
 
 ## Roadmap
 
-- Timezone handling, not sure what will happen if someone from a different time zone runs this
-
 - Switching to SQLite
 
-- Colored keys on the frontend
-
-- persistent storage for games client side (no refresh cheating)
-
 - active game caching for possible mid game server restart
-
-- caching wordle answer to avoid API timeout
-
-- fixing bad code (calling getAnswer twice, shadowed variables)
 
 - Enabling end-to-end-encryption (probably for last since not easy)
 
