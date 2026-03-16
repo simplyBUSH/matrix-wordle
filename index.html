@@ -136,9 +136,13 @@
         .then(res => res.text())
         .then(text => {wordlist = text.split('\n');});
 
-    fetch('/api/word')
+    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const userDate = new Date().toLocaleDateString('en-CA', {timeZone: userTimezone});
+
+    fetch(`/api/word?date=${userDate}`)
         .then(response => response.json())
         .then(data => {
+            if (data.error){console.error("2ord fetch failed ", data.error); return;}
             solution = data.word.toLowerCase();
             if (data.no) {
                 document.getElementById("wordle-no").innerText = `No. ${data.no}`;
@@ -196,6 +200,8 @@
     let cy = 0;
     let isOver = false;
 
+    loadProgress();
+
 function sendResults(didWin){
         const gameId = window.location.pathname.substring(1);
         const attempts = cx + 1; 
@@ -216,12 +222,57 @@ function sendResults(didWin){
     function colorKey(letter, colorHex){
         let keyBtn = document.getElementById("key-" + letter.toUpperCase());
         if (!keyBtn) return;
-        
-        
-        if (keyBtn.style.backgroundColor === "rgb(83, 141, 78)") return; 
+        // ignores already changed colors to not overwrite yellow / green 
+        if (keyBtn.style.backgroundColor === "rgb(83, 141, 78)") return;
+        if (keyBtn.style.backgroundColor === "rgb(181, 159, 59)") return;
         
         keyBtn.style.backgroundColor = colorHex;
         keyBtn.style.borderColor = colorHex;
+    }
+
+    function saveProgress(){
+        const gid = window.location.pathname.substring(1);
+        const state = {date: userDate, cx, cy, isOver, iconbox, tiles: [], keys: {}};
+
+        for (let i = 0; i < 6; i++){
+            for (let j = 0; j < 5; j++){
+                const tile = document.getElementById(i + "-" + j);
+                state.tiles.push({text: tile.innerText, bg: tile.style.backgroundColor, border: tile.style.borderColor});
+            }
+        }
+
+        const savable = keyboardLayout.flat().filter(k => k !== "ENTER" && k !== "⌫");
+        for (const key of savable){
+            const btn = document.getElementById("key-" + key);
+            if (btn && btn.style.backgroundColor) state.keys[key] = btn.style.backgroundColor;
+        }
+        localStorage.setItem('mordle_' + gid, JSON.stringify(state));
+    }
+
+    function loadProgress(){
+        const gid = window.location.pathname.substring(1);
+        const saved = localStorage.getItem('mordle_' + gid);
+        if (!saved) return;
+
+        const state = JSON.parse(saved);
+        if (state.date !== userDate){localStorage.removeItem('mordle_' + gid); return;}
+
+        cx = state.cx; 
+        cy = state.cy; 
+        isOver = state.isOver; 
+        iconbox = state.iconbox;
+
+        state.tiles.forEach((t, idx) => {
+            const tile = document.getElementById(Math.floor(idx / 5) + "-" + (idx % 5));
+            tile.innerText = t.text;
+            tile.style.backgroundColor = t.bg;
+            tile.style.borderColor = t.border;
+        });
+
+        for (const [key, color] of Object.entries(state.keys)){
+            const btn = document.getElementById("key-" + key);
+            if (btn){btn.style.backgroundColor = color; btn.style.borderColor = color;}
+        }
     }
 
     
@@ -286,7 +337,7 @@ function sendResults(didWin){
                     }else{
                         currTile.style.backgroundColor = "#3a3a3c"; 
                         currTile.style.borderColor = "#3a3a3c";
-                        //colorKey(guessArr[i], "#3a3a3c"); // ts was making correct letters gray so idk
+                        colorKey(guessArr[i], "#3a3a3c"); // works now!
                     }
                 }
 
@@ -295,6 +346,7 @@ function sendResults(didWin){
                 if (guess === solution){
                     notif("Good boy~");
                     isOver = true;
+                    saveProgress();
                     sendResults(true); 
                     return;
                 }
@@ -302,12 +354,14 @@ function sendResults(didWin){
                 if (cx === 5){
                     notif(solution.toUpperCase());
                     isOver = true;
+                    saveProgress();
                     sendResults(false); 
                     return;
                 }
 
                 cx += 1;
                 cy = 0;
+                saveProgress();
             }else
                 notif("Not enough letters");
         }

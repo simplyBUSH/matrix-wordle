@@ -8,7 +8,9 @@ const fs = require("fs");
 const url = process.env.MATRIX_URL;
 const token = process.env.MATRIX_TOKEN;
 const bot_id = process.env.MATRIX_BOT_ID;
+
 const dbFile = 'data/database.json';
+const  wordsFile= 'data/words.json';
 
 const active = new Map(); 
 
@@ -16,14 +18,14 @@ const app = express();
 const port = 3000;
 app.use(express.json());
 
-function ifplayed(roomid, t) {
+function ifplayed(roomid, t){
     if (!t) return false;
     return Object.values(t).some(record => 
         (record.roomids && record.roomids.includes(roomid)) || record.roomid === roomid
     );
 }
 
-function getstreak(roomid, db) {
+function getstreak(roomid, db){
     let streak = 0;
     let dateObj = new Date();
     const d = (date) => date.toLocaleDateString('en-CA', {timeZone: 'Europe/Warsaw'});
@@ -31,48 +33,87 @@ function getstreak(roomid, db) {
     let playedToday = ifplayed(roomid, db[d(dateObj)]);
     if (playedToday) streak++;
     
-    while (true) {
+    while (true){
         dateObj.setDate(dateObj.getDate() - 1);
         let prevDayStr = d(dateObj);
         
-        if (ifplayed(roomid, db[prevDayStr])) {
+        if (ifplayed(roomid, db[prevDayStr])){
             streak++;
-        } else {
+
+        }else{
             break; 
         }
     }
     return streak;
 }
 
-async function getAnswer() {
-  try{
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    const formattedDate = `${year}-${month}-${day}`;
-
-    const url = `https://www.nytimes.com/svc/wordle/v2/${formattedDate}.json`;
-    const response = await fetch(url);
-
-    if (!response.ok)
-      throw new Error(response.statusText);
-
-    const data = await response.json();
-    return data;
-   }catch (error){
-    console.error(error.message);
-    return null;
-  }
+function wDate(days = 0){
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toLocaleDateString('en-CA', {timeZone: 'Europe/Warsaw'});
 }
 
-app.get('/api/word', async (req, res) => {
-    const answer = await getAnswer();
-    if(answer){
-        res.json({word: answer.solution.toLowerCase(), no: answer.days_since_launch});
-    }else{
-        res.json({word: "furry", no: "???"});
+async function fetchNYT(dateStr){
+    const res = await fetch(`https://www.nytimes.com/svc/wordle/v2/${dateStr}.json`);
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    return {word: data.solution.toLowerCase(), no: data.days_since_launch};
+}
+
+async function updateWords(){
+    const window = [wDate(-1), wDate(0), wDate(1)];
+
+    let words = {};
+    if (fs.existsSync(wordsFile)){
+        try {words = JSON.parse(fs.readFileSync(wordsFile, 'utf8'));}
+        catch {words = {};}
     }
+    let changed = false;
+    for (const date of window){
+        if (!words[date]){
+            try{
+                words[date] = await fetchNYT(date);
+                console.log(`fetched word for ${date}: ${words[date].word}`);
+                changed = true;
+            }catch (e){
+                console.error(`failed to fetch word for ${date}:`, e.message);
+            }
+        }
+    }
+    const keep = new Set(window);
+    for (const key of Object.keys(words)){
+        if (!keep.has(key)){delete words[key]; changed = true;}
+    }
+
+    if (changed){
+        fs.mkdirSync('data', {recursive: true});
+        fs.writeFileSync(wordsFile, JSON.stringify(words, null, 2));
+    }
+    return words;
+}
+
+setInterval(updateWords, 3_600_000);
+
+app.get('/api/word', async (req, res) => {
+    const date = req.query.date;
+
+    if (date){
+        if (fs.existsSync(wordsFile)){
+            try{
+                const words = JSON.parse(fs.readFileSync(wordsFile, 'utf8'));
+                if (words[date]) return res.json({word: words[date].word, no: words[date].no});
+            }catch {}
+        }
+
+        try{
+            const entry = await fetchNYT(date);
+            return res.json({word: entry.word, no: entry.no});
+        }catch (e){            
+            console.error('NYT fallback failed:', e.message);
+        }
+    }
+
+    res.status(500).json({error: 'Word unavailable'});
 });
 
 app.post('/api/result', (req, res) => {
@@ -85,7 +126,7 @@ app.post('/api/result', (req, res) => {
     const {roomid, usid} = current;
     const today = new Date().toLocaleDateString('en-CA', {timeZone: 'Europe/Warsaw'});    
 
-    //again GOTTA SWITCH TO SQLITE
+    //again GOTTA SWITCH TO SQLITE - not today (16.03)
     let db = {};
     if (fs.existsSync(dbFile)){
         db = JSON.parse(fs.readFileSync(dbFile, 'utf8'));
@@ -246,30 +287,35 @@ client.on("room.message", (roomid, event) => {
             return a.score - b.score;
         });
 
-        getAnswer().then(wordleData => {
-            const wordleNo = wordleData ? wordleData.days_since_launch : "???";
-            const str = getstreak(roomid, db);
-            
-            let message = `Todays wordle scores\nNo. ${wordleNo} | 🔥 Streak: ${str}\n\n`;            
-            scoreboard.forEach((player, index) => {
-                let medal = "⬛";
-                if (player.score !== 'X'){
-                    if (index === 0) medal = "🥇";
-                    else if (index === 1) medal = "🥈";
-                    else if (index === 2) medal = "🥉";
-                }
-                
-                message += `${medal} ${player.usid}: ${player.score}/6\n`;
-            });
+        let num = "no clue";
+        if (fs.existsSync(wordsFile)){
+            try{
+                const words = JSON.parse(fs.readFileSync(wordsFile, 'utf8'));
+                if (words[today]) num = words[today].no;
+            }catch{}
+        }
 
-            client.sendMessage(roomid, {msgtype: "m.text",body: message});
+        const str = getstreak(roomid, db);
+        let message = `Todays wordle scores\nNo. ${num} | 🔥 Streak: ${str}\n\n`;
+
+        scoreboard.forEach((player, index) => {
+            let medal = "⬛";
+            if (player.score !== 'X') {
+                if (index === 0) medal = "🥇";
+                else if (index === 1) medal = "🥈";
+                else if (index === 2) medal = "🥉";
+            }
+            message += `${medal} ${player.usid}: ${player.score}/6\n`;
         });
+
+        client.sendMessage(roomid, {msgtype: "m.text", body: message});
     }
 });
 
 client.start().then(async () => {
     console.log("Wordle Bot started");
-    const updf = 'update.md'
+    await updateWords();
+    const updf = 'update.html';
 
     if (fs.existsSync(updf)){
         const msg = fs.readFileSync(updf, 'utf-8');
@@ -278,14 +324,17 @@ client.start().then(async () => {
             const rooms = await client.getJoinedRooms();
 
             for (const room of rooms){
+                // changed for formatted text - matrix uses html not markdown for some reason?
                 await client.sendMessage(room, {
                     msgtype: "m.text",
-                    body: msg
+                    format: "org.matrix.custom.html",
+                    body: msg,
+                    formatted_body: msg
                 });
 
                 await new Promise(resolve => setTimeout(resolve, 2000));
             }
-        } catch (error) {
+        }catch (error){
             console.error(error);
         }
     }
