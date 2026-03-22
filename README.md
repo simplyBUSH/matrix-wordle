@@ -12,7 +12,7 @@ This is a wordle bot for the internet messaging platform Matrix. It creates a wo
 
 ## Test
 
-You can test it yourself right now! Create a room **without E2EE** and invite `@wordle:simplybush.pl` to it. It does take a few seconds to respond because of federation.
+You can test it yourself right now! Create a room **without E2EE** and invite `@wordle:simplybush.pl` to it. It does take a few seconds to respond because of federation. Then, run ```!help``` to view available commands
 
 ## Deployment
 

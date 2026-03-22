@@ -220,15 +220,12 @@ function sendResults(didWin){
 
     
     function colorKey(letter, colorHex){
-        let keyBtn = document.getElementById("key-" + letter.toUpperCase());
-        if (!keyBtn) return;
-        // ignores already changed colors to not overwrite yellow / green 
-        if (keyBtn.style.backgroundColor === "rgb(83, 141, 78)") return;
-        if (keyBtn.style.backgroundColor === "rgb(181, 159, 59)") return;
-        
-        keyBtn.style.backgroundColor = colorHex;
-        keyBtn.style.borderColor = colorHex;
-    }
+    let keyBtn = document.getElementById("key-" + letter.toUpperCase());
+    if (!keyBtn) return;
+    if (keyBtn.style.backgroundColor === "rgb(83, 141, 78)") return;
+    keyBtn.style.backgroundColor = colorHex;
+    keyBtn.style.borderColor = colorHex;
+}
 
     function saveProgress(){
         const gid = window.location.pathname.substring(1);
@@ -293,78 +290,75 @@ function sendResults(didWin){
                 currTile.innerText = "";
             }
         } 
-        else if (key === "Enter" || key === "ENTER"){
-            if (cy === 5){
-                let guess = "";
-                for (let c = 0; c < 5; c++){
-                    guess += document.getElementById(cx + "-" + c).innerText.toLowerCase(); 
-                }
-
-                if (!wordlist.includes(guess)){
-                    notif("Not in word list");
-                    return; 
-                }
-
-                let answerArr = solution.split(""); 
-                let guessArr = guess.split("");
-                let iconrow = ["⬛", "⬛", "⬛", "⬛", "⬛"];
-
-                //pass 1 checkking for corect letters
-                for (let i = 0; i < 5; i++){
-                    let currTile = document.getElementById(cx + "-" + i);
-                    if (guessArr[i] === answerArr[i]) {
-                        currTile.style.backgroundColor = "#538d4e"; 
-                        currTile.style.borderColor = "#538d4e";
-                        colorKey(guessArr[i], "#538d4e"); 
-                        iconrow[i] = "🟩"; 
-                        answerArr[i] = null; 
-                        guessArr[i] = null;
-                    }
-                }
-
-                //pass 2 chekcing for yellow
-                for (let i = 0; i < 5; i++){
-                    let currTile = document.getElementById(cx + "-" + i);
-                    if (guessArr[i] === null) continue; 
-
-                    let letterPos = answerArr.indexOf(guessArr[i]);
-                    if (letterPos !== -1){
-                        currTile.style.backgroundColor = "#b59f3b"; 
-                        currTile.style.borderColor = "#b59f3b";
-                        colorKey(guessArr[i], "#b59f3b"); 
-                        iconrow[i] = "🟨"; 
-                        answerArr[letterPos] = null; 
-                    }else{
-                        currTile.style.backgroundColor = "#3a3a3c"; 
-                        currTile.style.borderColor = "#3a3a3c";
-                        colorKey(guessArr[i], "#3a3a3c"); // works now!
-                    }
-                }
-
-                iconbox += iconrow.join("") + "\n";
-
-                if (guess === solution){
-                    notif("Good boy~");
-                    isOver = true;
-                    saveProgress();
-                    sendResults(true); 
-                    return;
-                }
-
-                if (cx === 5){
-                    notif(solution.toUpperCase());
-                    isOver = true;
-                    saveProgress();
-                    sendResults(false); 
-                    return;
-                }
-
-                cx += 1;
-                cy = 0;
-                saveProgress();
-            }else
-                notif("Not enough letters");
+       else if (key === "Enter" || key === "ENTER"){
+    if (cy === 5){
+        let guess = "";
+        for (let c = 0; c < 5; c++){
+            guess += document.getElementById(cx + "-" + c).innerText.toLowerCase();
         }
+
+        if (!wordlist.includes(guess)){
+            notif("Not in word list");
+            return;
+        }
+
+        let answerArr = solution.split("");
+        let guessArr = guess.split("");
+        let iconrow = ["⬛", "⬛", "⬛", "⬛", "⬛"];
+        let tileColors = [null, null, null, null, null];
+
+        for (let i = 0; i < 5; i++){
+            if (guessArr[i] === answerArr[i]){
+                tileColors[i] = "#538d4e";
+                iconrow[i] = "🟩";
+                answerArr[i] = null;
+                guessArr[i] = null;
+            }
+        }
+
+        for (let i = 0; i < 5; i++){
+            if (guessArr[i] === null) continue;
+            let letterPos = answerArr.indexOf(guessArr[i]);
+            if (letterPos !== -1){
+                tileColors[i] = "#b59f3b";
+                iconrow[i] = "🟨";
+                answerArr[letterPos] = null;
+            } else {
+                tileColors[i] = "#3a3a3c";
+            }
+        }
+
+        for (let i = 0; i < 5; i++){
+            let currTile = document.getElementById(cx + "-" + i);
+            currTile.style.backgroundColor = tileColors[i];
+            currTile.style.borderColor = tileColors[i];
+            colorKey(guess[i], tileColors[i]);
+        }
+
+        iconbox += iconrow.join("") + "\n";
+
+        if (guess === solution){
+            notif("Good boy~");
+            isOver = true;
+            saveProgress();
+            sendResults(true);
+            return;
+        }
+
+        if (cx === 5){
+            notif(solution.toUpperCase());
+            isOver = true;
+            saveProgress();
+            sendResults(false);
+            return;
+        }
+
+        cx += 1;
+        cy = 0;
+        saveProgress();
+    } else
+        notif("Not enough letters");
+}
     }
 
     
