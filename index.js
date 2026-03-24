@@ -169,7 +169,7 @@ const storage = new SimpleFsStorageProvider("data/bot-state.json");
 const client = new MatrixClient(url, token, storage);
 AutojoinRoomsMixin.setupOnClient(client);
 
-client.on("room.message", (roomid, event) => {
+client.on("room.message", async (roomid, event) => {
     if (event.sender === bot_id) return;
     if (!event.content || event.content.msgtype !== "m.text") return;
 
@@ -245,7 +245,18 @@ client.on("room.message", (roomid, event) => {
         }, 86400000);
         
         const gameLink = `https://wordle.simplybush.pl/${gid}`;
-        client.sendMessage(roomid, {msgtype: "m.text", body: `good luck uwu: ${gameLink}`});
+        let displayName = usid;
+        try {
+            const profile = await client.getUserProfile(usid);
+            if (profile?.displayname) displayName = profile.displayname;
+        } catch {}
+
+        client.sendMessage(roomid, {
+            msgtype: "m.text",
+            format: "org.matrix.custom.html",
+            body: `good luck ${displayName} uwu: ${gameLink}`,
+            formatted_body: `good luck <a href="https://matrix.to/#/${usid}">${displayName}</a> uwu: ${gameLink}`
+        });
     }
 
     if (command === "!lb"){
