@@ -4,13 +4,33 @@ const express = require("express");
 const {v4: uuidv4} = require("uuid");
 const path = require("path");
 const fs = require("fs");
+const Database = require('better-sqlite3');
+
+const wordsFile = 'data/words.json';
+
+fs.mkdirSync('data', { recursive: true });
+const db = new Database('data/database.db');
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS results (
+    date    TEXT NOT NULL,
+    usid    TEXT NOT NULL,
+    score   TEXT NOT NULL,
+    grid    TEXT NOT NULL,
+    PRIMARY KEY (date, usid)
+  );
+  CREATE TABLE IF NOT EXISTS result_rooms (
+    date    TEXT NOT NULL,
+    usid    TEXT NOT NULL,
+    roomid  TEXT NOT NULL,
+    PRIMARY KEY (date, usid, roomid),
+    FOREIGN KEY (date, usid) REFERENCES results(date, usid)
+  );
+`);
 
 const url = process.env.MATRIX_URL;
 const token = process.env.MATRIX_TOKEN;
 const bot_id = process.env.MATRIX_BOT_ID;
-
-const dbFile = 'data/database.json';
-const  wordsFile= 'data/words.json';
 
 const active = new Map(); 
 
@@ -18,31 +38,23 @@ const app = express();
 const port = 3000;
 app.use(express.json());
 
-function ifplayed(roomid, t){
-    if (!t) return false;
-    return Object.values(t).some(record => 
-        (record.roomids && record.roomids.includes(roomid)) || record.roomid === roomid
-    );
+function ifplayed(roomid, dateStr) {
+    const row = db.prepare(`SELECT 1 FROM result_rooms WHERE date = ? AND roomid = ? LIMIT 1`).get(dateStr, roomid);
+    return !!row;
 }
 
-function getstreak(roomid, db){
+function getstreak(roomid) {
     let streak = 0;
+    const d = (date) => date.toLocaleDateString('en-CA', { timeZone: 'Europe/Warsaw' });
     let dateObj = new Date();
-    const d = (date) => date.toLocaleDateString('en-CA', {timeZone: 'Europe/Warsaw'});
-    
-    let playedToday = ifplayed(roomid, db[d(dateObj)]);
-    if (playedToday) streak++;
-    
-    while (true){
-        dateObj.setDate(dateObj.getDate() - 1);
-        let prevDayStr = d(dateObj);
-        
-        if (ifplayed(roomid, db[prevDayStr])){
-            streak++;
 
-        }else{
-            break; 
-        }
+    if (ifplayed(roomid, d(dateObj))) streak++;
+    else return 0;
+
+    while (true) {
+        dateObj.setDate(dateObj.getDate() - 1);
+        if (ifplayed(roomid, d(dateObj))) streak++;
+        else break;
     }
     return streak;
 }
@@ -117,40 +129,27 @@ app.get('/api/word', async (req, res) => {
 });
 
 app.post('/api/result', (req, res) => {
-    const {gid, box, attempts, ifwon} = req.body;
-    
+    const { gid, box, attempts, ifwon } = req.body;
+
     const current = active.get(gid);
     if (!current) return res.status(404).send("Game not found or already finished");
-    // ^^^ will literary never happen because all ids point to index.html - site will always load but not save
 
-    const {roomid, usid} = current;
-    const today = new Date().toLocaleDateString('en-CA', {timeZone: 'Europe/Warsaw'});    
-
-    //again GOTTA SWITCH TO SQLITE - not today (16.03)
-    let db = {};
-    if (fs.existsSync(dbFile)){
-        db = JSON.parse(fs.readFileSync(dbFile, 'utf8'));
-    }
-    
-    if (!db[today]) db[today] = {};
-    
+    const { roomid, usid } = current;
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Warsaw' });
     const scoreText = ifwon ? attempts : 'X';
-    
-    db[today][usid] = {
-        score: scoreText,
-        grid: box,
-        roomids: [roomid]
-    };
 
-    
-    fs.writeFileSync(dbFile, JSON.stringify(db, null, 2));
+    db.prepare(`
+        INSERT INTO results (date, usid, score, grid)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(date, usid) DO UPDATE SET score=excluded.score, grid=excluded.grid
+    `).run(today, usid, String(scoreText), box);
+
+    db.prepare(`
+        INSERT OR IGNORE INTO result_rooms (date, usid, roomid) VALUES (?, ?, ?)
+    `).run(today, usid, roomid);
 
     const message = `Wordle ${scoreText}/6\nPlayer: ${usid}\n\n${box}`;
-    
-    client.sendMessage(roomid, {
-        msgtype: "m.text",
-        body: message
-    });
+    client.sendMessage(roomid, { msgtype: "m.text", body: message });
 
     active.delete(gid);
     res.json({ success: true });
@@ -181,58 +180,28 @@ client.on("room.message", async (roomid, event) => {
         client.sendMessage(roomid, {msgtype: "m.text", body: `click the generated link and finish the game, your answer will be saved in a leaderboard for this chat!\n\nList of commands: \n!play - generate a link to todays wordle \n!lb - show the leaderboard in current channel \n!share - adds your answer to this chat \n!help - show this message`});
     }
 
-    if (command === "!share"){
-        //copy existing answer to this channel
-        const usid = event.sender;
+   if (command === "!share") {
+    const usid = event.sender;
+    const record = db.prepare(`SELECT score, grid FROM results WHERE date = ? AND usid = ?`).get(today, usid);
 
-        let db = {};
-        if (fs.existsSync(dbFile)){
-            db = JSON.parse(fs.readFileSync(dbFile, 'utf8'));
-        }
+    if (record) {
+        const message = `result added to this room:\n\nWordle ${record.score}/6\nPlayer: ${usid}\n\n${record.grid}`;
+        client.sendMessage(roomid, { msgtype: "m.text", body: message });
 
-        if (db[today] && db[today][usid]){
-            const userRecord = db[today][usid];
-            const message = `result added to this rooms:\n\nWordle ${userRecord.score}/6\nPlayer: ${usid}\n\n${userRecord.grid}`;
-            
-            client.sendMessage(roomid, {
-                msgtype: "m.text", 
-                body: message
-            });
-            
-            //i fhad roomid change to rommids
-            if (userRecord.roomid && !userRecord.roomids) {
-                userRecord.roomids = [userRecord.roomid];
-                delete userRecord.roomid;
-            }
-
-            //if the roomid is not in the users file, add it to roomids
-            if (userRecord.roomids && !userRecord.roomids.includes(roomid)) {
-                userRecord.roomids.push(roomid);
-                fs.writeFileSync(dbFile, JSON.stringify(db, null, 2));
-            }
-
-        } else {
-            client.sendMessage(roomid, {
-                msgtype: "m.text", 
-                body: "you haven't completed the puzzle yet"
-            });
-        }
+        db.prepare(`INSERT OR IGNORE INTO result_rooms (date, usid, roomid) VALUES (?, ?, ?)`).run(today, usid, roomid);
+    } else {
+        client.sendMessage(roomid, { msgtype: "m.text", body: "you haven't completed the puzzle yet" });
     }
+}
 
     if (command === "!play"){
         const usid = event.sender;
+        const played = db.prepare(`SELECT 1 FROM results WHERE date = ? AND usid = ?`).get(today, usid);
 
-        let db = {};
-        if (fs.existsSync(dbFile)){
-            db = JSON.parse(fs.readFileSync(dbFile, 'utf8'));
-        }
-
-        if (db[today] && db[today][usid]){
-            const userRecord = db[today][usid];
-            const message = `you can only play one game a day`;
-            client.sendMessage(roomid, {msgtype: "m.text", body: message});
-            return; 
-        }
+    if (played) {
+        client.sendMessage(roomid, { msgtype: "m.text", body: "you can only play one game a day" });
+        return;
+    }
 
         const gid = uuidv4().substring(0, 8);
         active.set(gid, {roomid: roomid, usid: usid});
@@ -259,68 +228,49 @@ client.on("room.message", async (roomid, event) => {
         });
     }
 
-    if (command === "!lb"){
-        let db = {};
-        if (fs.existsSync(dbFile)){
-            db = JSON.parse(fs.readFileSync(dbFile, 'utf8'));
-        }
+if (command === "!lb") {
+    const players = db.prepare(`
+        SELECT r.usid, r.score
+        FROM results r
+        JOIN result_rooms rr ON r.date = rr.date AND r.usid = rr.usid
+        WHERE r.date = ? AND rr.roomid = ?
+    `).all(today, roomid);
 
-        if (!db[today] || Object.keys(db[today]).length === 0){
-            client.sendMessage(roomid,{msgtype: "m.text", body: "No one has played Wordle today yet\nget to it"});
-            return;
-        }
-
-        const players = Object.keys(db[today]).filter(usid => {
-            const record = db[today][usid];
-            
-            if (record.roomids) {
-                return record.roomids.includes(roomid);
-            } 
-
-            // safe to remove, backup if still SOMEHOW is using roomid not roomids
-            else if (record.roomid) {
-                return record.roomid === roomid;
-            }
-            return false;
-        });
-     
-        const scoreboard = players.map(usid => {
-            return {
-                usid: usid,
-                score: db[today][usid].score
-            };
-        });
-
-        scoreboard.sort((a, b) => {
-            if (a.score === 'X' && b.score === 'X') return 0;
-            if (a.score === 'X') return 1;
-            if (b.score === 'X') return -1;
-            return a.score - b.score;
-        });
-
-        let num = "no clue";
-        if (fs.existsSync(wordsFile)){
-            try{
-                const words = JSON.parse(fs.readFileSync(wordsFile, 'utf8'));
-                if (words[today]) num = words[today].no;
-            }catch{}
-        }
-
-        const str = getstreak(roomid, db);
-        let message = `Todays wordle scores\nNo. ${num} | 🔥 Streak: ${str}\n\n`;
-
-        scoreboard.forEach((player, index) => {
-            let medal = "⬛";
-            if (player.score !== 'X') {
-                if (index === 0) medal = "🥇";
-                else if (index === 1) medal = "🥈";
-                else if (index === 2) medal = "🥉";
-            }
-            message += `${medal} ${player.usid}: ${player.score}/6\n`;
-        });
-
-        client.sendMessage(roomid, {msgtype: "m.text", body: message});
+    if (players.length === 0) {
+        client.sendMessage(roomid, { msgtype: "m.text", body: "No one has played Wordle today yet\nget to it" });
+        return;
     }
+
+    players.sort((a, b) => {
+        if (a.score === 'X' && b.score === 'X') return 0;
+        if (a.score === 'X') return 1;
+        if (b.score === 'X') return -1;
+        return a.score - b.score;
+    });
+
+    let num = "no clue";
+    if (fs.existsSync(wordsFile)) {
+        try {
+            const words = JSON.parse(fs.readFileSync(wordsFile, 'utf8'));
+            if (words[today]) num = words[today].no;
+        } catch {}
+    }
+
+    const str = getstreak(roomid);
+    let message = `Todays wordle scores\nNo. ${num} | 🔥 Streak: ${str}\n\n`;
+
+    players.forEach((player, index) => {
+        let medal = "⬛";
+        if (player.score !== 'X') {
+            if (index === 0) medal = "🥇";
+            else if (index === 1) medal = "🥈";
+            else if (index === 2) medal = "🥉";
+        }
+        message += `${medal} ${player.usid}: ${player.score}/6\n`;
+    });
+
+    client.sendMessage(roomid, { msgtype: "m.text", body: message });
+}
 });
 
 client.start().then(async () => {

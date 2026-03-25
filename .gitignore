@@ -7,3 +7,5 @@ data/
 bot-state.json
 update.html
 .update.html
+.migrate.js
+.database.json
