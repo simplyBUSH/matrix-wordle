@@ -25,9 +25,9 @@ Just make sure to edit your .env and Traefik routes (examples in repo)
 
 ## Roadmap
 
-- Switching to SQLite
-
 - active game caching for possible mid game server restart
+
+- global leaderboard maybe?
 
 - Enabling end-to-end-encryption (probably for last since not easy)
 
