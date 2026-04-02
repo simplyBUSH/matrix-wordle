@@ -18,18 +18,23 @@ This is a wordle bot for the internet messaging platform Matrix. It creates a wo
 
 ## Test
 
-You can test it yourself right now! Create a room **without E2EE** and invite `@wordle:simplybush.pl` to it. It does take a few seconds to respond because of federation. Then, run ```!help``` to view available commands
+You can test it yourself right now! Create a room **```without E2EE```** and invite `@wordle:simplybush.pl` to it, it will accept automatically. It does, however, take a few seconds to respond because of federation. Then, run ```!help``` to view available commands
+
+## How it works
+When my friends and I switched to Matrix, we really missed the Wordle app that was built into Discord. Matrix widgets exist, but they’re dependent on which client you use. My workaround was to create a bot not unlike the old wordle bots before the collab: when you type !play, it generates a game ID linked to your user profile and waits for a "game over" signal from that specific URL. Ideally, the link would be sent as a message only the player can see, but that functionality doesn't exist in Matrix. I had two options: send the link in plain text for everyone in that room to see, or as a DM. I chose the first one, mostly because this is just a small project for me and my friends and we're honest enough to not solve each other's games. If you have a better way of doing this, let me know.
 
 ## Deployment
 
-To deploy this project run
+To deploy this project 
+
+1. make sure to edit your .env and Traefik routes (examples in repo)
+
+2. run
 
 ```bash
   docker compose up --build
 ```
-You also need to move the words.txt file to the data dir created by the bot
-
-Just make sure to edit your .env and Traefik routes (examples in repo)
+3. move the words.txt file to the data dir created by the bot
 
 ## Roadmap
 
