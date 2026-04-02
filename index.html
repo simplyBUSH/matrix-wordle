@@ -132,17 +132,17 @@
     let solution = "apple"; 
     let iconbox = "";
 
-    fetch('https://raw.githubusercontent.com/tabatkins/wordle-list/master/words')
+    fetch('/api/wordlist')
         .then(res => res.text())
-        .then(text => {wordlist = text.split('\n');});
+        .then(text => wordlist = text.replace(/\r/g, '').split('\n'));
 
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const userDate = new Date().toLocaleDateString('en-CA', {timeZone: userTimezone});
 
-    fetch(`/api/word?date=${userDate}`)
+    fetch(`/api/word?date=${userDate}`)     
         .then(response => response.json())
         .then(data => {
-            if (data.error){console.error("2ord fetch failed ", data.error); return;}
+            if (data.error){console.error("Word fetch failed ", data.error); return;}
             solution = data.word.toLowerCase();
             if (data.no) {
                 document.getElementById("wordle-no").innerText = `No. ${data.no}`;
@@ -219,10 +219,13 @@ function sendResults(didWin){
     }
 
     
-    function colorKey(letter, colorHex){
+function colorKey(letter, colorHex) {
     let keyBtn = document.getElementById("key-" + letter.toUpperCase());
     if (!keyBtn) return;
-    if (keyBtn.style.backgroundColor === "rgb(83, 141, 78)") return;
+    let currentBg = keyBtn.style.backgroundColor;
+    if (currentBg === "rgb(83, 141, 78)" || currentBg === "#538d4e") return;
+    if ((currentBg === "rgb(181, 159, 59)" || currentBg === "#b59f3b") && colorHex === "#3a3a3c") return;
+
     keyBtn.style.backgroundColor = colorHex;
     keyBtn.style.borderColor = colorHex;
 }
@@ -292,9 +295,15 @@ function sendResults(didWin){
         } 
        else if (key === "Enter" || key === "ENTER"){
     if (cy === 5){
+
+        if (wordlist.length === 0) {
+            notif("Loading words, please wait...");
+            return;
+        }
+
         let guess = "";
         for (let c = 0; c < 5; c++){
-            guess += document.getElementById(cx + "-" + c).innerText.toLowerCase();
+            guess += document.getElementById(cx + "-" + c).textContent.toLowerCase();
         }
 
         if (!wordlist.includes(guess)){
@@ -338,7 +347,7 @@ function sendResults(didWin){
         iconbox += iconrow.join("") + "\n";
 
         if (guess === solution){
-            notif("Good boy~");
+            notif("Good girl~");
             isOver = true;
             saveProgress();
             sendResults(true);

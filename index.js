@@ -155,8 +155,14 @@ app.post('/api/result', (req, res) => {
     res.json({ success: true });
 });
 
+app.get('/api/wordlist', (req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.sendFile(path.join(__dirname, 'data', 'words.txt'));
+});
+
 app.get('/:id', (req, res) => {
     if (req.params.id === 'favicon.ico') return res.status(404).end();
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private'); //actually keep this one!!!
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 

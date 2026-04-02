@@ -21,6 +21,8 @@ To deploy this project run
 ```bash
   docker compose up --build
 ```
+You also need to move the words.txt file to the data dir created by the bot
+
 Just make sure to edit your .env and Traefik routes (examples in repo)
 
 ## Roadmap
@@ -34,6 +36,7 @@ Just make sure to edit your .env and Traefik routes (examples in repo)
 ## Acknowledgements
 
 - [matrix-bot-sdk](https://github.com/turt2live/matrix-bot-sdk) — Matrix bot framework
+- [word-list](https://github.com/tabatkins/wordle-list) - List with correct words
 
 > **Note:** Puzzle data is fetched from the unofficial NYT Wordle endpoint.
 > Not affiliated with or endorsed by The New York Times.
