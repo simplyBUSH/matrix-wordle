@@ -26,6 +26,11 @@ db.exec(`
     PRIMARY KEY (date, usid, roomid),
     FOREIGN KEY (date, usid) REFERENCES results(date, usid)
   );
+  -- New table exclusively for themes
+  CREATE TABLE IF NOT EXISTS user_themes (
+    usid    TEXT PRIMARY KEY,
+    colors  TEXT NOT NULL
+  );
 `);
 
 const url = process.env.MATRIX_URL;
@@ -107,19 +112,28 @@ async function updateWords(){
 setInterval(updateWords, 3_600_000);
 
 app.get('/api/word', async (req, res) => {
-    const date = req.query.date;
+    const { date, gid } = req.query;
+    let theme = null;
+
+    if (gid) {
+        const session = active.get(gid);
+        if (session) {
+            const row = db.prepare('SELECT colors FROM user_themes WHERE usid = ?').get(session.usid);
+            if (row) theme = JSON.parse(row.colors);
+        }
+    }
 
     if (date){
         if (fs.existsSync(wordsFile)){
             try{
                 const words = JSON.parse(fs.readFileSync(wordsFile, 'utf8'));
-                if (words[date]) return res.json({word: words[date].word, no: words[date].no});
+                if (words[date]) return res.json({word: words[date].word, no: words[date].no, theme: theme});
             }catch {}
         }
 
         try{
             const entry = await fetchNYT(date);
-            return res.json({word: entry.word, no: entry.no});
+            return res.json({word: entry.word, no: entry.no, theme: theme});
         }catch (e){            
             console.error('NYT fallback failed:', e.message);
         }
@@ -183,7 +197,7 @@ client.on("room.message", async (roomid, event) => {
 
     //commands
     if (command === "!help"){
-        client.sendMessage(roomid, {msgtype: "m.text", body: `click the generated link and finish the game, your answer will be saved in a leaderboard for this chat!\n\nList of commands: \n!play - generate a link to todays wordle \n!lb - show the leaderboard in current channel \n!share - adds your answer to this chat \n!help - show this message`});
+        client.sendMessage(roomid, {msgtype: "m.text", body: `click the generated link and finish the game, your answer will be saved in a leaderboard for this chat!\n\nList of commands: \n!play - generate a link to todays wordle \n!lb - show the leaderboard in current channel \n!share - adds your answer to this chat \n!help - show this message\n!theme - change theme, more info with !theme h`});
     }
 
    if (command === "!share") {
@@ -277,6 +291,63 @@ if (command === "!lb") {
 
     client.sendMessage(roomid, { msgtype: "m.text", body: message });
 }
+
+    if (command.startsWith("!theme ")) {
+        const args = command.split(" ");
+        const action = args[1];
+
+        if (action === "h") {
+            client.sendMessage(roomid, { msgtype: "m.text", body: "This commands is used to set up a custom theme upon completing the daily wordle \nCorrect usage: !theme set [pride/trans/ace/custom]\nCustom theme requires five hex codes after !theme set custom\nTo remove theming use !theme clear" });
+        }
+
+
+        if (action === "clear") {
+            db.prepare(`DELETE FROM user_themes WHERE usid = ?`).run(event.sender);
+            client.sendMessage(roomid, { msgtype: "m.text", body: "Theme cleared" });
+            return;
+        }
+
+        if (action === "set") {
+            const themeName = args[2]?.toLowerCase();
+            let colors = [];
+
+            if (themeName === "pride") {
+                colors = ["#E40303", "#FF8C00", "#FFED00", "#008026", "#24408E"];
+            } else if (themeName === "trans") {
+                colors = ["#5BCEFA", "#F5A9B8", "#FFFFFF", "#F5A9B8", "#5BCEFA"];
+            } else if (themeName === "ace") {
+                colors = ["#000000", "#A3A3A3", "#FFFFFF", "#810081", "#000000"];
+            } else if (themeName === "custom") {
+                const hexArgs = args.slice(3);
+                const parsedColors = [];
+                
+                for (let arg of hexArgs) {
+                    const cleanHex = arg.replace('#', '');
+                    if (/^[0-9A-Fa-f]{6}$/.test(cleanHex)) {
+                        parsedColors.push('#' + cleanHex.toUpperCase());
+                    }
+                }
+
+                if (parsedColors.length !== 5) {
+                    client.sendMessage(roomid, { msgtype: "m.text", body: "Custom themes require exactly 5 valid hex codes. Example: !theme set custom b200ff 468bd6 9046d6 d69046 8cd646" });
+                    return;
+                }
+                colors = parsedColors;
+            } else {
+                client.sendMessage(roomid, { msgtype: "m.text", body: "Unknown theme. Available: pride, trans, ace, custom" });
+                return;
+            }
+
+            db.prepare(`
+                INSERT INTO user_themes (usid, colors)
+                VALUES (?, ?)
+                ON CONFLICT(usid) DO UPDATE SET colors=excluded.colors
+            `).run(event.sender, JSON.stringify(colors));
+            
+            client.sendMessage(roomid, { msgtype: "m.text", body: `Theme updated to ${themeName}` });
+        }
+    }
+
 });
 
 client.start().then(async () => {

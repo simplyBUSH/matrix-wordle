@@ -139,16 +139,26 @@
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const userDate = new Date().toLocaleDateString('en-CA', {timeZone: userTimezone});
 
-    fetch(`/api/word?date=${userDate}`)     
+    let userTheme = null;
+    const gameId = window.location.pathname.substring(1);
+
+    fetch(`/api/word?date=${userDate}&gid=${gameId}`)     
         .then(response => response.json())
         .then(data => {
             if (data.error){console.error("Word fetch failed ", data.error); return;}
             solution = data.word.toLowerCase();
+            if (data.theme) userTheme = data.theme;
             if (data.no) {
                 document.getElementById("wordle-no").innerText = `No. ${data.no}`;
             }
         })
         .catch(error => console.error("Failed to fetch word", error));
+
+    function getTextColor(hex) {
+        const rgb = parseInt(hex.slice(1), 16);
+        const luma = 0.2126 * ((rgb >> 16) & 0xff) + 0.7152 * ((rgb >> 8) & 0xff) + 0.0722 * ((rgb >> 0) & 0xff);
+        return luma > 128 ? '#121213' : '#ffffff';
+    }
 
     const board = document.getElementById("board");
     for (let i = 0; i<6; i++){
@@ -237,7 +247,7 @@ function colorKey(letter, colorHex) {
         for (let i = 0; i < 6; i++){
             for (let j = 0; j < 5; j++){
                 const tile = document.getElementById(i + "-" + j);
-                state.tiles.push({text: tile.innerText, bg: tile.style.backgroundColor, border: tile.style.borderColor});
+                state.tiles.push({text: tile.innerText, bg: tile.style.backgroundColor, border: tile.style.borderColor, color: tile.style.color});
             }
         }
 
@@ -267,6 +277,8 @@ function colorKey(letter, colorHex) {
             tile.innerText = t.text;
             tile.style.backgroundColor = t.bg;
             tile.style.borderColor = t.border;
+            
+            tile.style.color = t.color ? t.color : '#ffffff'; 
         });
 
         for (const [key, color] of Object.entries(state.keys)){
@@ -349,6 +361,18 @@ function colorKey(letter, colorHex) {
         if (guess === solution){
             notif("Good girl~");
             isOver = true;
+            
+            if (userTheme && userTheme.length === 5) {
+                for (let r = 0; r < 6; r++) {
+                    for (let c = 0; c < 5; c++) {
+                        let tile = document.getElementById(r + "-" + c);
+                        tile.style.backgroundColor = userTheme[c];
+                        tile.style.borderColor = userTheme[c];
+                        tile.style.color = getTextColor(userTheme[c]);
+                    }
+                }
+            }
+
             saveProgress();
             sendResults(true);
             return;

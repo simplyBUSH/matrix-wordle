@@ -9,6 +9,12 @@
 
 This is a wordle bot for the internet messaging platform Matrix. It creates a wordle session for a user, saves the results in a database and can display a leaderboard. It works across spaces and rooms.
 
+## Latest update drop
+### Added support for custom themes!!
+- After a successful trial run on our focus group, our team came to the conclusion that custom themes are something our users are craving. You can choose from a variety of pre-made themes to display after winning a game, or you can make your own! To get more info, send ```!theme h``` to our bot
+- The keyboard colors have also been changed to actually display correctly the progress of your guess
+- A few iOS-specific bugs have also been fixed
+
 
 ## Test
 
